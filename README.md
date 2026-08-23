@@ -14,7 +14,7 @@ Work in progress.
 
 - [x] Data loading with schema validation
 - [x] Cleaning pipeline (leakage filtering, variance-based column pruning, missing-as-category)
-- [ ] ICD-9 diagnosis grouping
+- [x] ICD-9 diagnosis grouping
 - [ ] Feature engineering
 - [ ] Models: logistic regression, LightGBM, PyTorch MLP
 - [ ] Evaluation: AUROC, AUPRC, calibration, precision@k, SHAP, subgroup breakdown
@@ -41,6 +41,20 @@ structural reason. `A1Cresult` (81.6% absent) and `max_glu_serum` (95.2% absent)
 record tests that were never ordered and whether an A1C was ordered is the
 central finding of the original Strack et al. (2014) paper. These are encoded as
 explicit categories rather than imputed away.
+
+**ICD-9 grouping.** The three diagnosis columns contain 695, 724, and 757
+distinct ICD-9 codes respectively, which is too granular to learn from, since most codes
+appear only a handful of times. Codes are grouped into clinical categories by
+numeric range, following Strack et al. (2014).
+
+Their nine-category scheme left 17.3% of primary diagnoses in a catch-all
+`Other` bucket. Inspecting its contents showed four coherent blocks: infectious
+disease (septicemia and cellulitis, ~2,500 encounters), endocrine and metabolic
+disorders, blood disorders, and mental health diagnoses. Sepsis and psychiatric
+comorbidity are both established readmission risk factors, so these were split
+into their own categories rather than left pooled. V-codes (supplementary
+factors) and E-codes (external causes) have no place on the numeric scale and
+remain in `Other`.
 
 ## Setup
 

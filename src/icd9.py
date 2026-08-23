@@ -28,8 +28,14 @@ _RANGES = [
     (800, 999, "Injury"),
     (710, 739, "Musculoskeletal"),
     (140, 239, "Neoplasms"),
+    # Extensions beyond Strack et al.: these blocks accounted for most of the
+    # original 'Other' bucket (17.3% of diag_1), and sepsis and psychiatric
+    # comorbidity are both established readmission risk factors.
+    (1, 139, "Infectious"),
+    (240, 279, "Endocrine"),
+    (280, 289, "Blood"),
+    (290, 319, "Mental"),
 ]
-
 
 def _categorize(code) -> str:
     """Map a single ICD-9 code string to its clinical category."""

@@ -17,7 +17,10 @@ from src.icd9 import _categorize, add_diagnosis_groups, DIAG_COLS
         ("715", "Musculoskeletal"),
         ("V57", "Other"),
         ("E909", "Other"),
-        ("276", "Other"),
+        ("276", "Endocrine"),
+        ("038", "Infectious"),
+        ("296", "Mental"),
+        ("285", "Blood"),
         ("Missing", "Missing"),
     ],
 )
