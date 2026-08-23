@@ -18,15 +18,16 @@ TARGET_RAW = "readmitted"
 TARGET = "readmitted_30d"
 
 
-def _filter_rows(df: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
+def _filter_rows(df: pd.DataFrame, first_encounter_only: bool = True, verbose: bool = True) -> pd.DataFrame:
     """Reduce to one row per patient and remove impossible outcomes."""
     n_start = len(df)
     # first encounter per patient,encounter_id is assumed monotonically
     # increasing in time -- the dataset has no timestamps, so this is the
     # only available ordering.
-    df = df.sort_values("encounter_id").drop_duplicates("patient_nbr", keep="first")
+    if first_encounter_only:
+        df = df.sort_values("encounter_id").drop_duplicates("patient_nbr", keep="first")
     n_first = len(df)
-
+    
     # Patients who died or entered hospice cannot be readmitted; leaving them
     # in labels them as negatives for the wrong reason.
     df = df[~df["discharge_disposition_id"].isin(DEATH_HOSPICE_IDS)]
@@ -36,6 +37,7 @@ def _filter_rows(df: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
         print(f"rows: {n_start} -> {n_first} (first encounter) -> {n_final} (alive)")
 
     return df.reset_index(drop=True)
+    
 
 DROP_COLS = ["weight"]
 
@@ -114,17 +116,15 @@ def _build_target(df: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
         print(f"target '{TARGET}': {df[TARGET].sum()} positives, rate {rate:.4f}")
 
     return df
-def clean(df: pd.DataFrame, nzv_threshold: float = 0.995, verbose: bool = True) -> pd.DataFrame:
-    """Full cleaning pipeline: raw dataframe -> modelling-ready frame.
-
-    Rows are filtered before variance is computed
-    """
-    df = _filter_rows(df, verbose=verbose)
+def clean(df: pd.DataFrame, first_encounter_only: bool = True,
+          nzv_threshold: float = 0.995, verbose: bool = True) -> pd.DataFrame:
+    df = _filter_rows(df, first_encounter_only=first_encounter_only, verbose=verbose)
     df = _drop_uninformative(df, nzv_threshold=nzv_threshold, verbose=verbose)
     df = _encode_missing(df, verbose=verbose)
     df = _build_target(df, verbose=verbose)
 
-    assert df[ID_COLS[1]].is_unique, "expected one row per patient"
+    if first_encounter_only:
+        assert df[ID_COLS[1]].is_unique, "expected one row per patient"
     assert TARGET in df.columns and TARGET_RAW not in df.columns
 
     return df
