@@ -33,9 +33,10 @@ and risk increases monotonically across all ten deciles.
 
 ![SHAP summary](reports/figures/shap_summary.png)
 
-The five dominant drivers account for roughly 48% of total attributed model
-impact:
+The 3 most dominant drivers account for roughly 40% of total attributed model
+impact.
 
+The top 5:
 | Rank | Feature | Mean \|SHAP\| |
 |---|---|---|
 | 1 | Discharge disposition | 0.202 |
@@ -118,13 +119,13 @@ record tests that were never ordered and whether an A1C was ordered is the
 central finding of Strack et al. (2014). These are encoded as explicit
 categories.
 
-**ICD-9 grouping extended.** 695/724/757 distinct codes across the three
+**ICD-9 grouping extended.** 716/748/787 distinct codes across the three
 diagnosis columns are grouped by numeric range following Strack et al. Their
 nine-category scheme left 17.3% of primary diagnoses in a catch-all `Other`
 bucket; inspecting its contents revealed four coherent blocks: infectious
 disease, endocrine/metabolic, blood, and mental health. Since sepsis and
 psychiatric comorbidity are both established readmission risk factors, these
-were split out, reducing `Other` to 9.1%.
+were split out, reducing `Other` to 9.3%.
 
 **Model comparison.** Logistic regression reaches AUROC 0.646; tuned LightGBM
 reaches 0.680. The modest gap suggests the signal is largely additive.
