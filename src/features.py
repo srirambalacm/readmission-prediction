@@ -6,8 +6,14 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
+
 
 from src.clean import ID_COLS, TARGET
+
+RANDOM_STATE = 42
+TEST_SIZE = 0.2
+
 
 # Integer-coded but categorica, these are lookup keys from IDS_mapping.csv,
 # not quantities. Discharge code 11 is not "greater than" discharge code 3.
@@ -24,6 +30,8 @@ AGE_MIDPOINTS = {
     "[0-10)": 5, "[10-20)": 15, "[20-30)": 25, "[30-40)": 35, "[40-50)": 45,
     "[50-60)": 55, "[60-70)": 65, "[70-80)": 75, "[80-90)": 85, "[90-100)": 95,
 }
+
+
 
 
 def prepare(df: pd.DataFrame) -> pd.DataFrame:
@@ -68,3 +76,14 @@ def build_preprocessor(X: pd.DataFrame, scale_numeric: bool = True) -> ColumnTra
         ],
         remainder="drop",
     )
+
+def make_splits(X: pd.DataFrame, y: pd.Series, test_size: float = TEST_SIZE):
+    """Single stratified holdout, every row is a distinct patient (first
+    encounter only), so no group-aware splitting is required here."""
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y,
+        test_size=test_size,
+        stratify=y,
+        random_state=RANDOM_STATE,
+    )
+    return X_train, X_test, y_train, y_test
