@@ -20,19 +20,24 @@ cross-validation), so no number reflects data the model trained on.
 
 | Model | AUROC | AUPRC | Precision@10% | Notes |
 |---|---|---|---|---|
-| Logistic regression | 0.646 | 0.167 | — | scaled, one-hot, L2 |
-| **LightGBM** | **0.680** | **0.237** | **0.285** | 5-fold CV, tuned |
+| Logistic regression | 0.664 | 0.215 | 0.264 | scaled, one-hot, L2 |
+| **LightGBM** | **0.680** | **0.237** | **0.285** | 5-fold grouped CV, tuned |
 | PyTorch MLP | 0.673 | 0.235 | 0.279 | embeddings, single holdout |
+
+All three rows are evaluated on the same 99,343 encounters with the same
+features. Logistic regression and LightGBM use 5-fold patient-grouped
+cross-validation; the MLP uses a single 80/20 holdout, so its figure carries
+more variance.
 
 Baselines for context: AUPRC baseline (random) is 0.114, so 0.237 is a **2.08x**
 lift; the Brier baseline (predicting the base rate) is 0.1009, beaten at 0.0955.
 
-Gradient boosting matched or slightly beat both a linear model and a neural
-network. This is the expected outcome on tabular data of this size, tree
-ensembles capture interactions without the data volume deep learning needs, and
-the signal here is close enough to additive that even logistic regression lands
-within 0.03 AUROC of the best model. The MLP is a single 80/20 holdout, so its
-figure carries more variance, but the three models are within noise regardless.
+Gradient boosting beat the linear baseline by 0.016 AUROC and 0.022 AUPRC, and
+slightly edged the neural network. The small spread across three very different
+model families suggests the signal in this data is close to additive: there are
+few strong feature interactions for a tree ensemble to exploit, and neither the
+data volume nor the feature complexity gives deep learning an edge. This is the
+expected outcome on tabular data of this size.
 
 **Operationally**, the model separates a 3.7% risk decile from a 28.5% risk
 decile, with risk rising monotonically across all ten deciles. For a care team
@@ -64,7 +69,7 @@ The top three features carry ~40% of total attributed impact:
 - **Age ranks only 12th.** What predicts readmission is not how old a patient
   is, but how much acute care they have recently needed.
 - **Payer code ranks 6th.** Its predictive power likely reflects access barriers
-  and socioeconomic position rather than clinical risk — worth flagging before
+  and socioeconomic position rather than clinical risk, worth flagging before
   any deployment.
 
 ## Calibration
@@ -74,8 +79,9 @@ The top three features carry ~40% of total attributed impact:
 Predicted probabilities are accurate to within ~1 percentage point across the
 full range: a patient scored 0.25 readmits about 25% of the time. This makes the
 output usable for capacity planning, not just ranking. No resampling (SMOTE) or
-class weighting was used — both improve apparent recall at a fixed threshold but
-distort probabilities, and calibrated output was judged more valuable.
+class weighting was used, since both improve apparent recall at a fixed
+threshold but distort probabilities, and calibrated output was judged more
+valuable.
 
 ## Fairness audit
 
@@ -121,13 +127,13 @@ rather than hard cases.
 
 ## Limitations
 
-- **Data vintage.** 1999–2008, ICD-9, pre-ACA — would not transfer to a current
+- **Data vintage.** 1999–2008, ICD-9, pre-ACA, would not transfer to a current
   population without retraining.
 - **Performance ceiling.** Published results cluster at 0.65–0.70 AUROC; billing
   data omits the strongest plausible drivers (adherence, social support,
   housing, follow-up access).
 - **Outcome definition.** Late readmissions (>30 days, 35% of encounters) fall
-  in the negative class matching the CMS window but mixing stable patients
+  in the negative class, matching the CMS window but mixing stable patients
   with later returns.
 - **Elderly discrimination gap.** See fairness audit.
 
@@ -137,6 +143,7 @@ rather than hard cases.
 python -m venv .venv
 .venv\Scripts\Activate.ps1     # Windows
 pip install -r requirements.txt
+pip install -e .
 pytest -v                       # 24 tests
 ```
 
