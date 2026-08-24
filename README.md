@@ -1,42 +1,52 @@
 # 30-Day Hospital Readmission Prediction
 
-Predicting 30-day readmission for diabetic inpatients using the
-[UCI Diabetes 130-US Hospitals dataset](https://archive.ics.uci.edu/dataset/296/diabetes+130-us+hospitals+for+years+1999-2008)
-(101,766 encounters, 130 hospitals, 1999–2008).
+**Predicting which diabetic inpatients will be readmitted within 30 days and why, on 100k hospital encounters from 130 US
+hospitals.**
 
-Readmission within 30 days is the window used by the CMS Hospital Readmissions
-Reduction Program, which penalizes hospitals for excess readmissions so the
-target maps to a real operational and financial decision.
+| | |
+|---|---|
+| **Problem** | Hospitals are penalized by Medicare (CMS HRRP) for excess 30-day readmissions. Identifying high-risk patients at discharge lets care teams target limited follow-up capacity. |
+| **Data** | [UCI Diabetes 130-US Hospitals](https://archive.ics.uci.edu/dataset/296/diabetes+130-us+hospitals+for+years+1999-2008): 101,766 encounters, 50 features, 1999–2008. ~11% readmitted within 30 days. |
+| **Approach** | Logistic regression → tuned LightGBM → PyTorch MLP with categorical embeddings. Domain-driven cleaning, ICD-9 grouping, SHAP interpretation, calibration and fairness audits. |
+| **Result** | LightGBM, AUROC **0.68**, and **2.5x lift** in the top risk decile: targeting the top 10% of discharges finds patients who readmit at 28.5% vs 11.4% at random. |
+| **Takeaway** | Prior utilization and discharge destination dominate risk; a neural net did not beat gradient boosting; and a suspected data-leakage trap turned out not to matter (verified by experiment). |
 
-## Headline results
+Everything below reports **out-of-fold** performance (5-fold patient-grouped
+cross-validation), so no number reflects data the model trained on.
 
-Out-of-fold performance, LightGBM, 5-fold patient-grouped cross-validation on
-99,343 encounters (11.4% positive):
+---
 
-| Metric | Value | Baseline | Lift |
-|---|---|---|---|
-| AUROC | 0.680 | 0.500 | — |
-| AUPRC | 0.237 | 0.114 | 2.08x |
-| Precision @ top 10% | 0.285 | 0.114 | 2.51x |
-| Brier score | 0.0955 | 0.1009 | — |
+## Results
 
-**Operationally:** if a care management team can follow up with 10% of
-discharges, targeting by this model finds a group where 28.5% readmit, versus
-11.4% selecting at random, 2.5x more readmissions caught per outreach call.
+| Model | AUROC | AUPRC | Precision@10% | Notes |
+|---|---|---|---|---|
+| Logistic regression | 0.646 | 0.167 | — | scaled, one-hot, L2 |
+| **LightGBM** | **0.680** | **0.237** | **0.285** | 5-fold CV, tuned |
+| PyTorch MLP | 0.673 | 0.235 | 0.279 | embeddings, single holdout |
 
-The model separates a 3.7% risk decile from a 28.5% risk decile out-of-fold,
-and risk increases monotonically across all ten deciles.
+Baselines for context: AUPRC baseline (random) is 0.114, so 0.237 is a **2.08x**
+lift; the Brier baseline (predicting the base rate) is 0.1009, beaten at 0.0955.
+
+Gradient boosting matched or slightly beat both a linear model and a neural
+network. This is the expected outcome on tabular data of this size, tree
+ensembles capture interactions without the data volume deep learning needs, and
+the signal here is close enough to additive that even logistic regression lands
+within 0.03 AUROC of the best model. The MLP is a single 80/20 holdout, so its
+figure carries more variance, but the three models are within noise regardless.
+
+**Operationally**, the model separates a 3.7% risk decile from a 28.5% risk
+decile, with risk rising monotonically across all ten deciles. For a care team
+that can follow up with 10% of discharges, that is 2.5x more readmissions caught
+per outreach call than random selection.
 
 ![Readmission rate by risk decile](reports/figures/decile_lift.png)
 
-## Risk factors
+## What drives readmission
 
 ![SHAP summary](reports/figures/shap_summary.png)
 
-The 3 most dominant drivers account for roughly 40% of total attributed model
-impact.
+The top three features carry ~40% of total attributed impact:
 
-The top 5:
 | Rank | Feature | Mean \|SHAP\| |
 |---|---|---|
 | 1 | Discharge disposition | 0.202 |
@@ -45,130 +55,106 @@ The top 5:
 | 4 | Primary diagnosis group | 0.084 |
 | 5 | Admitting specialty | 0.077 |
 
-**Prior utilization dominates.** Readmission rate rises monotonically with
-prior inpatient stays, 8.6% at zero, 13.3% at one, 17.9% at two, 31.4% at four
-or more. Patients with four or more prior stays readmit at **3.7x** the rate of
-those with none.
-
-**Discharge destination is the single strongest feature.** Discharge to
-inpatient rehab carries a 27.7% readmission rate versus 9.3% for discharge
-home, 3x higher. This is a transition point where an intervention could
-plausibly be placed.
-
-**Age matters less than expected**, ranking 12th. What predicts readmission is
-not how old a patient is but how much acute care they have recently needed.
-
-**Payer code ranks 6th**, and its predictive power likely reflects access
-barriers and socioeconomic position rather than clinical risk. 
+- **Prior utilization dominates.** Readmission rises monotonically with prior
+  inpatient stays: 8.6% (zero) → 13.3% → 17.9% → 31.4% (four or more). The
+  heaviest-utilizing patients readmit at **3.7x** the rate of those with none.
+- **Discharge destination is the single strongest feature.** Discharge to
+  inpatient rehab carries 27.7% readmission vs 9.3% for discharge home, a
+  transition point where an intervention could plausibly be placed.
+- **Age ranks only 12th.** What predicts readmission is not how old a patient
+  is, but how much acute care they have recently needed.
+- **Payer code ranks 6th.** Its predictive power likely reflects access barriers
+  and socioeconomic position rather than clinical risk — worth flagging before
+  any deployment.
 
 ## Calibration
 
 ![Calibration curve](reports/figures/calibration.png)
 
-Predicted probabilities are accurate to within roughly one percentage point
-across the full range, a patient scored 0.25 readmits about 25% of the time.
-This is makes the output usable for capacity planning rather than ranking
-alone.
+Predicted probabilities are accurate to within ~1 percentage point across the
+full range: a patient scored 0.25 readmits about 25% of the time. This makes the
+output usable for capacity planning, not just ranking. No resampling (SMOTE) or
+class weighting was used — both improve apparent recall at a fixed threshold but
+distort probabilities, and calibrated output was judged more valuable.
 
-No resampling (SMOTE) or class weighting was used. Both improve apparent recall
-at a fixed threshold but distort predicted probabilities; calibrated output was
-judged more valuable than a better default-threshold confusion matrix.
-
-## Subgroup performance
+## Fairness audit
 
 ![AUROC by age band](reports/figures/auroc_by_age.png)
 
 Calibration is stable across race, sex, and age, no subgroup gap exceeds 0.6
-percentage points, so no group is systematically over or under-scored.
+percentage points, so no group is systematically over or under scored.
 
-Discrimination is less uniform. AUROC falls from 0.76 in patients under 40 to
-**0.63 in patients 75 and older**, the group with both the highest readmission
-prevalence (12.5%) and the largest sample (19,023). The model ranks least
-effectively where risk is greatest, likely because utilization-history features
-saturate in elderly patients, and because readmission in that population
-depends on factors absent from administrative data (frailty, functional status,
-caregiver availability).
+Discrimination is less uniform: AUROC falls from 0.76 (under 40) to **0.63 (75+)**,
+the group with both the highest prevalence (12.5%) and the largest sample
+(19,023). The model ranks least effectively where risk is greatest likely
+because utilization-history features saturate in elderly patients, and because
+readmission there depends on factors absent from billing data (frailty,
+functional status, caregiver support). A deployed policy should allocate
+follow-up capacity within age strata, not on a single pooled threshold.
 
-A deployed targeting policy should allocate follow up capacity within age strata
-rather than on a single pooled threshold.
-
-## Methodology notes
+## Methodology highlights
 
 **Patient-level leakage was tested, not assumed.** 29.7% of rows are repeat
-encounters; one patient appears 40 times. Standard practice is to restrict to
-first encounters, on the theory that a random split lets a model memorize
-individual patients. Running both a naive random split and a patient-grouped
-split on identical data produced **identical results** (AUROC 0.6792 both ways),
-and the gap remained zero even with a deliberately over-parameterized model
-(1000 trees, 255 leaves, `min_child_samples=1`).
+encounters (one patient appears 40 times). The textbook move is to restrict to
+first encounters, since a random split could let a model memorize individuals.
+Running naive-random and patient-grouped splits on identical data gave
+**identical results** (AUROC 0.6792 both ways) and the gap stayed zero even
+with a deliberately over-parameterized model. The features are too coarse to
+fingerprint individuals, so encounter-level modeling is used as primary, with
+patient-grouped CV kept as the correct default.
 
-The features are too coarse to fingerprint individuals, a 10-year age bucket,
-a 14-category diagnosis group, and a handful of counts are shared by thousands
-of patients. Leakage of this kind requires either a fine-grained representation
-or target-derived features; neither is present here. The encounter-level
-analysis is therefore used as primary, with patient-grouped CV retained as the
-correct default.
+**Nothing is imputed.** Every missing value is missing for a structural reason.
+`A1Cresult` (82% absent) and `max_glu_serum` (95%) record tests that were never
+ordered and whether an A1C was ordered is the central finding of Strack et al.
+(2014), so these are encoded as explicit categories rather than filled in.
+
+**ICD-9 grouping, extended.** The three diagnosis columns hold 716/748/787
+distinct codes, grouped by numeric range per Strack et al. Their nine-category
+scheme left 17% of primary diagnoses in a catch-all `Other`; inspecting it
+revealed four coherent blocks (infectious, endocrine/metabolic, blood, mental
+health). Since sepsis and psychiatric comorbidity are established risk factors,
+these were split out, shrinking `Other` to ~9%.
 
 **Impossible outcomes removed.** 2,423 encounters ended in death or hospice
-transfer. These patients cannot be readmitted, making them mislabeled negatives
+transfer, patients who cannot be readmitted, and are mislabeled negatives
 rather than hard cases.
-
-**Nothing is imputed.** Every column with missing values is missing for a
-structural reason. `A1Cresult` (81.6% absent) and `max_glu_serum` (95.2%)
-record tests that were never ordered and whether an A1C was ordered is the
-central finding of Strack et al. (2014). These are encoded as explicit
-categories.
-
-**ICD-9 grouping extended.** 716/748/787 distinct codes across the three
-diagnosis columns are grouped by numeric range following Strack et al. Their
-nine-category scheme left 17.3% of primary diagnoses in a catch-all `Other`
-bucket; inspecting its contents revealed four coherent blocks: infectious
-disease, endocrine/metabolic, blood, and mental health. Since sepsis and
-psychiatric comorbidity are both established readmission risk factors, these
-were split out, reducing `Other` to 9.3%.
-
-**Model comparison.** Logistic regression reaches AUROC 0.646; tuned LightGBM
-reaches 0.680. The modest gap suggests the signal is largely additive.
-Hyperparameters were selected by randomized search over six parameters
-(30 candidates, 5-fold, scoring on average precision).
 
 ## Limitations
 
-- **Data vintage.** 1999–2008, ICD-9, pre-ACA. A model trained here would not
-  transfer to a current patient population without retraining.
-- **Performance ceiling.** Published results on this dataset cluster at
-  0.65–0.70 AUROC. Administrative billing data does not contain the factors
-  that most plausibly drive readmission: medication adherence, social support,
-  housing stability, and follow-up appointment access.
-- **Outcome definition.** Late readmissions (>30 days, 35% of encounters) are
-  collapsed into the negative class. This matches the CMS penalty window but
-  means the negative class mixes genuinely stable patients with later returns.
-- **Elderly discrimination gap.** See subgroup section above.
+- **Data vintage.** 1999–2008, ICD-9, pre-ACA — would not transfer to a current
+  population without retraining.
+- **Performance ceiling.** Published results cluster at 0.65–0.70 AUROC; billing
+  data omits the strongest plausible drivers (adherence, social support,
+  housing, follow-up access).
+- **Outcome definition.** Late readmissions (>30 days, 35% of encounters) fall
+  in the negative class matching the CMS window but mixing stable patients
+  with later returns.
+- **Elderly discrimination gap.** See fairness audit.
 
-## Setup
+## Reproduce
 
 ```bash
 python -m venv .venv
 .venv\Scripts\Activate.ps1     # Windows
 pip install -r requirements.txt
-pytest -v
+pytest -v                       # 24 tests
 ```
 
-Download `diabetic_data.csv` and `IDS_mapping.csv` from the UCI link above into
-`data/raw/`. The dataset is not committed.
+Download `diabetic_data.csv` and `IDS_mapping.csv` from the UCI link into
+`data/raw/` (not committed).
 
 ## Layout
 
 ```
 src/
   load_data.py   # loading + schema validation
-  clean.py       # row filtering, variance pruning, target construction
+  clean.py       # filtering, variance pruning, target construction
   icd9.py        # ICD-9 code grouping
   features.py    # feature engineering, preprocessing, splits
   models.py      # logistic regression, LightGBM
+  mlp.py         # PyTorch MLP with categorical embeddings
   evaluate.py    # AUROC, AUPRC, Brier, precision@k
 tests/           # 24 tests
-notebooks/
-  01_eda.ipynb
+notebooks/01_eda.ipynb
 reports/figures/
 ```
