@@ -104,10 +104,11 @@ follow-up capacity within age strata, not on a single pooled threshold.
 encounters (one patient appears 40 times). The textbook move is to restrict to
 first encounters, since a random split could let a model memorize individuals.
 Running naive-random and patient-grouped splits on identical data gave
-**identical results** (AUROC 0.6792 both ways) and the gap stayed zero even
-with a deliberately over-parameterized model. The features are too coarse to
-fingerprint individuals, so encounter-level modeling is used as primary, with
-patient-grouped CV kept as the correct default.
+effectively **indistinguishable results** (AUROC 0.6798 vs 0.6795), and the gap
+stayed under 0.004 even with a deliberately over-parameterized model
+(0.6379 vs 0.6346). The features are too coarse to fingerprint individuals, so
+encounter-level modeling is used as primary, with patient-grouped CV kept as the
+correct default.
 
 **Nothing is imputed.** Every missing value is missing for a structural reason.
 `A1Cresult` (82% absent) and `max_glu_serum` (95%) record tests that were never
@@ -162,6 +163,6 @@ src/
   mlp.py         # PyTorch MLP with categorical embeddings
   evaluate.py    # AUROC, AUPRC, Brier, precision@k
 tests/           # 24 tests
-notebooks/01_eda.ipynb
+notebooks/01_analysis.ipynb
 reports/figures/
 ```
