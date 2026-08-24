@@ -54,7 +54,7 @@ The top three features carry ~40% of total attributed impact:
 
 | Rank | Feature | Mean \|SHAP\| |
 |---|---|---|
-| 1 | Discharge disposition | 0.202 |
+| 1 | Discharge disposition(destination) | 0.202 |
 | 2 | Prior inpatient visits | 0.171 |
 | 3 | Combined prior acute care | 0.109 |
 | 4 | Primary diagnosis group | 0.084 |
